@@ -3,7 +3,7 @@
     "targets": ["omnifocus"],
     "author": "Donie",
     "identifier": "org.0x3f.open_jira_ticket",
-    "version": "1.1",
+    "version": "2.0",
     "description": "Open jira ticket of the focused project.",
     "label": "Open jira ticket",
     "shortLabel": "Open jira ticket",
@@ -11,9 +11,17 @@
     "image": "j.square.on.square"
 }*/
 (() => {
-    let preferences = new Preferences();
+    const preferences = new Preferences();
 
-    const PREF_JIRA_URL = "jira_url";
+    const devPlugin = PlugIn.find('org.0x3f.libdev');
+
+    const PREF_JIRA_URL = 'jira_url';
+
+    if (devPlugin === null) {
+        throw new Error('Dev library plugin not installed.');
+    }
+
+    const libdev = devPlugin.library('libdev');
 
     function get_current_jira_ticket_number(selection) {
         if (selection.databaseObjects.length <= 0) {
@@ -41,57 +49,39 @@
     }
 
     function prompt_preferences_dialog() {
-        let defaultJiraURL = "";
+        const jiraURL = libdev.getString(preferences, PREF_JIRA_URL);
 
-        let jiraURL = preferences.readString(PREF_JIRA_URL);
-        if (!jiraURL) {
-            jiraURL = defaultJiraURL;
-        }
-
-        let jiraURLInput = new Form.Field.String(
+        const jiraURLInput = new Form.Field.String(
             PREF_JIRA_URL,
             "Jira URL",
             jiraURL
         );
 
-        let preferenceForm = new Form();
+        const preferenceForm = new Form();
 
         preferenceForm.addField(jiraURLInput);
 
-        let formPrompt = "Open Jira Ticket";
-        let buttonTitle = "Save";
+        preferenceForm.validate = function (formObject) { return true; };
 
-        let formPromise = preferenceForm.show(formPrompt, buttonTitle);
-
-        preferenceForm.validate = function (formObject) {
-            return true;
-        };
+        const formPromise = preferenceForm.show('Open Jira Ticket', 'Save');
 
         formPromise.then(function (formObject) {
-            jiraURL = formObject.values[PREF_JIRA_URL];
-            if (!jiraURL) {
-                jiraURL = "";
-            }
-
-            preferences.write(PREF_JIRA_URL, jiraURL.trim());
+            libdev.setString(preferences, PREF_JIRA_URL, formObject);
         });
-    }
-
-    function is_preference_action(sender) {
-        return (app.platformName === "macOS" && app.controlKeyDown) || (app.platformName === 'iOS' && sender instanceof MenuItem);
     }
 
     var action = new PlugIn.Action(function (selection, sender) {
         try {
-            if (is_preference_action(sender)) {
+            if (libdev.isPreferenceAction(sender)) {
                 prompt_preferences_dialog();
             } else {
-                const ticketNumber = get_current_jira_ticket_number(selection);
                 const jiraURL = preferences.readString(PREF_JIRA_URL);
 
                 if (jiraURL === null) {
                     throw { name: "Emmm...", message: "Jira URL must be set in preferences. (Click the action with CTRL key)" };
                 }
+
+                const ticketNumber = get_current_jira_ticket_number(selection);
 
                 URL.fromString(jiraURL + "/browse/DEV-" + ticketNumber).open();
             }
@@ -101,7 +91,7 @@
     });
 
     action.validate = function (selection, sender) {
-        return is_preference_action(sender) || get_current_jira_ticket_number(selection) !== null;
+        return libdev.isPreferenceAction(sender) || get_current_jira_ticket_number(selection) !== null;
     };
 
     return action;
